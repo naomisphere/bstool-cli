@@ -1,0 +1,425 @@
+#!/usr/bin/env sh
+BSTOOL_VER="1.0.0"
+BSTK_PATH="/Applications/BlueStacks.app"
+BSTK_APP_SUPPORT="/Users/Shared/Library/Application Support/BlueStacks"
+
+if [ -z "$1" ]; then
+  echo "bstool v${BSTOOL_VER}"
+  echo ""
+  echo "Usage: bstool [command] [options]"
+  echo "  write [kernel, initrd]         - replace kernel/initrd with given file"
+  echo "  verify [kernel, initrd]        - verify kernel/initrd integrity"
+  echo "  unpack [initrd]                - extract initrd from initrd_hvf.img"
+  echo "  conf [list, <prop> <value>]    - bluestacks config prop commands"
+  echo "  backup [apply, delete]         - backup management commands"
+  echo "  help                           - show this help message"
+  exit 1
+fi
+
+command="$1"
+
+case "$command" in
+  verify)
+    if [ -z "$2" ]; then
+      echo "Usage: bstool verify [initrd, kernel]"
+      echo "  initrd                  - verify integrity of initrd img"
+      echo "  kernel                  - verify integrity of kernel"
+      exit 1
+    fi
+
+    subcommand="$2"
+
+    case "$subcommand" in
+      initrd)
+        INITRD_IN="/Applications/BlueStacks.app/Contents/img/initrd_hvf.img"
+        if [ -z "$3" ]; then
+                echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+          echo "[*] Verifying $INITRD_IN"
+          
+          if [ ! -f "$INITRD_IN" ]; then
+            echo "[!] initrd not found"
+            exit 1
+          fi
+          
+          echo "[^] initrd appears valid"
+          exit 0
+        else
+          DIR="$3"
+          if [ ! -d "$DIR" ] || [ "$(basename "$DIR")" != "boot" ]; then
+            echo "[!] Invalid initrd"
+            echo "[!] Must provide 'boot' directory"
+            exit 1
+          fi
+
+          if [ ! -f "$DIR/bstsetup.env" ] || [ ! -f "$DIR/init" ] || [ ! -f "$DIR/stage2.sh" ]; then
+            echo "[!] Invalid initrd"
+            exit 1
+          fi
+          
+                          echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+          echo "[^] initrd directory appears valid"
+          exit 0
+        fi
+        ;;
+
+      kernel)
+        KERN="/Applications/BlueStacks.app/Contents/img/kernel_hvf"
+        if [ -z "$3" ]; then
+                echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+          VFYKERN=$(file "$KERN")
+          echo "[*] Verifying $KERN"
+          if ! echo "$VFYKERN" | grep -q "Linux kernel ARM64 boot executable Image, little-endian, 4K pages"; then
+          echo "[!] Invalid kernel"
+          echo "[!] file: $VFYKERN"
+          exit 1
+        fi
+          
+          if [ ! -f "$KERN" ]; then
+            echo "[!] Kernel not found"
+            exit 1
+          fi
+        else
+          KERN="$3"
+        fi
+
+        if [ "$(basename "$KERN")" != "kernel_hvf" ]; then
+          echo "[!] Invalid kernel"
+          exit 1
+        fi
+
+        VFYKERN=$(file "$KERN")
+        if echo "$VFYKERN" | grep -q "Linux kernel ARM64 boot executable Image, little-endian, 4K pages"; then
+          echo "[^] Kernel appears valid"
+          exit 0
+        else
+          echo "[!] kernel invalid or corrupted"
+          echo "[!] file: $VFYKERN"
+          exit 1
+        fi
+        ;;
+
+      *)
+        echo "Invalid argument: $subcommand"
+        echo "Usage: bstool verify [initrd, kernel]"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  write)
+    if [ -z "$2" ]; then
+      echo "Usage: bstool write [initrd, kernel]"
+      echo "  initrd <BOOT_DIR>   - process 'boot' dir into initrd and write"
+      echo "  kernel <KERNEL>     - replace kernel with given kernel"
+      exit 1
+    fi
+
+    subcommand="$2"
+
+    case "$subcommand" in
+      initrd)
+        if [ -z "$3" ]; then
+          echo "[!] Must provide 'boot' directory"
+          exit 1
+        fi
+
+        pkill -x BlueStacks
+
+        if [ ! -d "$3" ] || [ "$(basename "$3")" != "boot" ]; then
+          echo "[!] Not found / Not boot directory"
+          exit 1
+        fi
+
+        INITRD_IN="$3"
+
+        if [ ! -f "$INITRD_IN/bstsetup.env" ] || [ ! -f "$INITRD_IN/init" ] || [ ! -f "$INITRD_IN/stage2.sh" ]; then
+          echo "[!] Invalid initrd"
+          exit 1
+        fi
+        echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+
+        echo "[*] Compressing $3"
+        find "$INITRD_IN" | cpio -o -H newc > initrd.cpio 2>/dev/null
+        gzip -9 -n initrd.cpio
+
+        echo "[*] Writing files"
+        sudo mv -f initrd.cpio.gz /Applications/BlueStacks.app/Contents/img/initrd_hvf.img
+        echo "[*] Setting permissions"
+        sudo chown root:wheel /Applications/BlueStacks.app/Contents/img/initrd_hvf.img
+
+        echo "[^] Done"
+        ;;
+
+      kernel)
+        if [ -z "$3" ]; then
+          echo "[!] No kernel provided"
+          exit 1
+        fi
+
+        KERN="$3"
+        if [ ! -f "$KERN" ]; then
+          echo "[!] Kernel file not found"
+          exit 1
+        fi
+
+        if [ "$(basename "$KERN")" != "kernel_hvf" ]; then
+          echo "[!] Invalid kernel"
+          exit 1
+        fi
+
+        VFYKERN=$(file "$KERN")
+        if ! echo "$VFYKERN" | grep -q "Linux kernel ARM64 boot executable Image, little-endian, 4K pages"; then
+          echo "[!] Invalid kernel"
+          echo "[!] file: $VFYKERN"
+          exit 1
+        fi
+
+        pkill -x BlueStacks
+        echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+        VFYKERN=$(file "$KERN")
+        echo "[*] Verifying $KERN"
+        if ! echo "$VFYKERN" | grep -q "Linux kernel ARM64 boot executable Image, little-endian, 4K pages"; then
+          echo "[!] Invalid kernel"
+          echo "[!] file: $VFYKERN"
+          exit 1
+        fi
+        echo "[*] Writing $KERN as kernel"
+        sudo cp -f "$KERN" /Applications/BlueStacks.app/Contents/img/kernel_hvf
+        sudo chown root:wheel /Applications/BlueStacks.app/Contents/img/kernel_hvf
+        sleep 1.5
+        echo "[^] Done"
+        ;;
+
+      *)
+        echo "Invalid argument: $subcommand"
+        echo "Usage: bstool write [initrd, kernel]"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  unpack)
+    if [ -z "$2" ]; then
+      echo "Usage: bstool unpack initrd"
+      echo "  initrd - Extract initial ramdisk from initrd img"
+      exit 1
+    fi
+
+    subcommand="$2"
+
+    case "$subcommand" in
+      initrd)
+              echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+        pkill -x BlueStacks
+        echo "[*] Extracting initrd img to ${PWD}/boot"
+        gzip -d /Applications/BlueStacks.app/Contents/img/initrd_hvf.img -c | cpio -imVd 2>/dev/null
+        echo "[^] Done"
+        ;;
+
+      *)
+        echo "Invalid argument: $subcommand"
+        echo "Usage: bstool unpack initrd"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  conf)
+    if [ -z "$2" ]; then
+      echo "Usage: bstool conf [list, <prop> <value>]"
+      echo "  list                     - list props"
+      echo "  <prop> <value>           - modify a prop's value"
+      exit 1
+    fi
+
+    subcommand="$2"
+    BSTK_CONF="/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf"
+
+    if [ ! -f "$BSTK_CONF" ]; then
+      echo "[!] bluestacks.conf not found"
+      exit 1
+    fi
+
+    case "$subcommand" in
+      list)
+        echo "[*] Current prop conf:"
+        cat "$BSTK_CONF" | grep -v "^#" | grep -v "^$" | sort
+        ;;
+
+      *)
+        if [ -z "$3" ]; then
+          echo "[!] No value provided"
+          exit 1
+        fi
+
+        PROP="$subcommand"
+        value="$3"
+
+        if grep -q "^$PROP=" "$BSTK_CONF"; then
+          sudo sed -i '' "s/^$key=.*/$PROP=\"$value\"/" "$BSTK_CONF"
+          echo "[*] Changed $PROP to $value"
+        else
+          echo "[!] $PROP not found"
+          exit 1
+        fi
+        ;;
+    esac
+    ;;
+
+  backup)
+    if [ $(id -u) -eq 0 ]; then
+      echo "This command may not be run as root"
+      exit 1
+    fi
+
+    if [ -n "$2" ]; then
+      case "$2" in
+        apply)
+          if [ ! -e ~/.bstk/backups/ ]; then
+            echo "[!] No backup to apply"
+            exit 1
+          fi
+
+          echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+          echo "[*] Applying backup..."
+          pkill -x BlueStacks
+
+          # restore app
+          if [ -e ~/.bstk/backups/app ]; then
+            echo "[*] Restoring ${BSTK_PATH}"
+            sudo rm -rf /Applications/BlueStacks.app/*
+            sudo cp -rf ~/.bstk/backups/app/* /Applications/BlueStacks.app/
+            echo "[*] Setting permissions"
+            sudo chown -R root:wheel /Applications/BlueStacks.app
+          fi
+
+          # restore app support files
+          if [ -e ~/.bstk/backups/AppSupport/BlueStacks ]; then
+            echo "[*] Restoring ${BSTK_APP_SUPPORT}"
+            sudo rm -rf "/Users/Shared/Library/Application Support/BlueStacks"
+            sudo cp -rf ~/.bstk/backups/AppSupport/BlueStacks "/Users/Shared/Library/Application Support/"
+            echo "[*] Setting permissions"
+            sudo chown -R root:wheel "/Users/Shared/Library/Application Support/BlueStacks"
+          fi
+
+          echo "[^] Backup applied successfully"
+          ;;
+
+        delete)
+          if [ ! -n "$(ls -A ~/.bstk/backups)" ]; then
+            echo "[!] No backup to delete"
+            exit 1
+          fi
+
+          echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+          echo "[*] Deleting backup..."
+          rm -rf ~/.bstk/backups/*
+          echo "[^] Backup deleted successfully"
+          ;;
+
+        *)
+          echo "Invalid subcommand: $2"
+          echo "Usage: bstool backup [apply, delete]"
+          exit 1
+          ;;
+      esac
+    else
+      # main (backup)
+      if [ -e ~/.bstk/backups ] && [ -n "$(ls -A ~/.bstk/backups)" ]; then
+        echo "[!] Backup already exists."
+        printf "[!] Overwrite current backup? (y/n) "
+        read ans
+        case "$ans" in
+            [Yy]*) 
+                    echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+                echo "[*] Overwriting backup..."
+                rm -rf ~/.bstk/backups/*
+                ;;
+            *)
+                echo "[*] Skipping overwrite"
+                echo "[*] Operation canceled"
+                exit 1
+                ;;
+        esac
+      fi
+
+      echo "  _         _              _ 
+ | |__  ___| |_ ___   ___ | |
+ | '_ \/ __| __/ _ \ / _ \| |
+ | |_) \__ \ || (_) | (_) | |
+ |_.__/|___/\__\___/ \___/|_|
+                             "
+      echo "[*] Writing backup"
+      mkdir -p ~/.bstk/backups/AppSupport
+      mkdir -p ~/.bstk/backups/app
+      
+      cp -rf /Applications/BlueStacks.app/* ~/.bstk/backups/app
+      cp -rf "/Users/Shared/Library/Application Support/BlueStacks" ~/.bstk/backups/AppSupport/
+      echo "[^] Backup completed successfully"
+      echo "[*] Saved to ${HOME}/.bstk/backups"
+    fi
+    ;;
+
+  help)
+  echo "bstool v${BSTOOL_VER}"
+  echo ""
+  echo "Usage: bstool [command] [options]"
+  echo "  write [kernel, initrd]         - replace kernel/initrd with given file"
+  echo "  verify [kernel, initrd]        - verify kernel/initrd integrity"
+  echo "  unpack [initrd]                - extract initrd from initrd_hvf.img"
+  echo "  conf [list, <prop> <value>]    - bluestacks config prop commands"
+  echo "  backup [apply, delete]         - backup management commands"
+  echo "  help                           - show this help message"
+    ;;
+
+  *)
+    echo "[!] Unknown command: $command"
+    echo "[!] Use 'bstool help' for usage information."
+    exit 1
+    ;;
+esac
