@@ -286,7 +286,7 @@ case "$command" in
         value="$3"
 
         if grep -q "^$PROP=" "$BSTK_CONF"; then
-          sudo sed -i '' "s/^$key=.*/$PROP=\"$value\"/" "$BSTK_CONF"
+          sudo sed -i '' "s/^$PROP=.*/$PROP=\"$value\"/" "$BSTK_CONF"
           echo "[*] Changed $PROP to $value"
         else
           echo "[!] $PROP not found"
