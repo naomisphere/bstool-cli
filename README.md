@@ -13,6 +13,7 @@ Usage: bstool [command] [options]
   backup [apply, delete]         - backup management commands
   help
 ```
+For detailed usage examples, read [here](https://github.com/naomisphere/bstool-cli/blob/main/docs/commands.md)
 
 # Setup
 Write bstool directly to /usr/local/bin/bstool (Recommended)
