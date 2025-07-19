@@ -1,7 +1,9 @@
 #!/usr/bin/env sh
-BSTOOL_VER="1.0.0"
+BSTOOL_VER="1.1.0"
 BSTK_PATH="/Applications/BlueStacks.app"
 BSTK_APP_SUPPORT="/Users/Shared/Library/Application Support/BlueStacks"
+BAK_PATH="$HOME/.bstk/backups"
+LIB_SHARED_SPT="/Users/Shared/Library/Application Support"
 
 if [ -z "$1" ]; then
   echo "bstool v${BSTOOL_VER}"
@@ -31,7 +33,7 @@ case "$command" in
 
     case "$subcommand" in
       initrd)
-        INITRD_IN="/Applications/BlueStacks.app/Contents/img/initrd_hvf.img"
+        INITRD_IN="${BSTK_PATH}/Contents/img/initrd_hvf.img"
         if [ -z "$3" ]; then
                 echo "  _         _              _ 
  | |__  ___| |_ ___   ___ | |
@@ -73,7 +75,7 @@ case "$command" in
         ;;
 
       kernel)
-        KERN="/Applications/BlueStacks.app/Contents/img/kernel_hvf"
+        KERN="${BSTK_PATH}/Contents/img/kernel_hvf"
         if [ -z "$3" ]; then
                 echo "  _         _              _ 
  | |__  ___| |_ ___   ___ | |
@@ -163,9 +165,9 @@ case "$command" in
         gzip -9 -n initrd.cpio
 
         echo "[*] Writing files"
-        sudo mv -f initrd.cpio.gz /Applications/BlueStacks.app/Contents/img/initrd_hvf.img
+        sudo mv -f initrd.cpio.gz ${BSTK_PATH}/Contents/img/initrd_hvf.img
         echo "[*] Setting permissions"
-        sudo chown root:wheel /Applications/BlueStacks.app/Contents/img/initrd_hvf.img
+        sudo chown root:wheel ${BSTK_PATH}/Contents/img/initrd_hvf.img
 
         echo "[^] Done"
         ;;
@@ -209,8 +211,8 @@ case "$command" in
           exit 1
         fi
         echo "[*] Writing $KERN as kernel"
-        sudo cp -f "$KERN" /Applications/BlueStacks.app/Contents/img/kernel_hvf
-        sudo chown root:wheel /Applications/BlueStacks.app/Contents/img/kernel_hvf
+        sudo cp -f "$KERN" ${BSTK_PATH}/Contents/img/kernel_hvf
+        sudo chown root:wheel ${BSTK_PATH}/Contents/img/kernel_hvf
         sleep 1.5
         echo "[^] Done"
         ;;
@@ -242,7 +244,7 @@ case "$command" in
                              "
         pkill -x BlueStacks
         echo "[*] Extracting initrd img to ${PWD}/boot"
-        gzip -d /Applications/BlueStacks.app/Contents/img/initrd_hvf.img -c | cpio -imVd 2>/dev/null
+        gzip -d ${BSTK_PATH}/Contents/img/initrd_hvf.img -c | cpio -imVd 2>/dev/null
         echo "[^] Done"
         ;;
 
@@ -320,28 +322,28 @@ case "$command" in
           pkill -x BlueStacks
 
           # restore app
-          if [ -e ~/.bstk/backups/app ]; then
+          if [ -e "${BAK_PATH}/app" ]; then
             echo "[*] Restoring ${BSTK_PATH}"
-            sudo rm -rf /Applications/BlueStacks.app/*
-            sudo cp -rf ~/.bstk/backups/app/* /Applications/BlueStacks.app/
+            sudo rm -rf "${BSTK_PATH}"/*
+            sudo rsync -aEHX "${BAK_PATH}/app/" "${BSTK_PATH}/"
             echo "[*] Setting permissions"
-            sudo chown -R root:wheel /Applications/BlueStacks.app
+            sudo chown -R root:wheel "${BSTK_PATH}"
           fi
 
           # restore app support files
-          if [ -e ~/.bstk/backups/AppSupport/BlueStacks ]; then
+          if [ -e "${BAK_PATH}/AppSupport/BlueStacks" ]; then
             echo "[*] Restoring ${BSTK_APP_SUPPORT}"
-            sudo rm -rf "/Users/Shared/Library/Application Support/BlueStacks"
-            sudo cp -rf ~/.bstk/backups/AppSupport/BlueStacks "/Users/Shared/Library/Application Support/"
+            sudo rm -rf "${BSTK_APP_SUPPORT}"
+            sudo rsync -aEHX "${BAK_PATH}/AppSupport/BlueStacks/" "${BSTK_APP_SUPPORT}/"
             echo "[*] Setting permissions"
-            sudo chown -R root:wheel "/Users/Shared/Library/Application Support/BlueStacks"
+            sudo chown -R root:wheel "${BSTK_APP_SUPPORT}"
           fi
 
           echo "[^] Backup applied successfully"
           ;;
 
         delete)
-          if [ ! -n "$(ls -A ~/.bstk/backups)" ]; then
+          if [ ! -n "$(ls -A ${BAK_PATH})" ]; then
             echo "[!] No backup to delete"
             exit 1
           fi
@@ -353,7 +355,7 @@ case "$command" in
  |_.__/|___/\__\___/ \___/|_|
                              "
           echo "[*] Deleting backup..."
-          rm -rf ~/.bstk/backups/*
+          rm -rf "${BAK_PATH}"/*
           echo "[^] Backup deleted successfully"
           ;;
 
@@ -365,7 +367,7 @@ case "$command" in
       esac
     else
       # main (backup)
-      if [ -e ~/.bstk/backups ] && [ -n "$(ls -A ~/.bstk/backups)" ]; then
+      if [ -e "${BAK_PATH}" ] && [ -n "$(ls -A ${BAK_PATH})" ]; then
         echo "[!] Backup already exists."
         printf "[!] Overwrite current backup? (y/n) "
         read ans
@@ -378,7 +380,7 @@ case "$command" in
  |_.__/|___/\__\___/ \___/|_|
                              "
                 echo "[*] Overwriting backup..."
-                rm -rf ~/.bstk/backups/*
+                sudo rm -rf "${BAK_PATH}"/*
                 ;;
             *)
                 echo "[*] Skipping overwrite"
@@ -395,11 +397,11 @@ case "$command" in
  |_.__/|___/\__\___/ \___/|_|
                              "
       echo "[*] Writing backup"
-      mkdir -p ~/.bstk/backups/AppSupport
-      mkdir -p ~/.bstk/backups/app
+      mkdir -p "${BAK_PATH}/AppSupport"
+      mkdir -p "${BAK_PATH}/app"
       
-      cp -rf /Applications/BlueStacks.app/* ~/.bstk/backups/app
-      cp -rf "/Users/Shared/Library/Application Support/BlueStacks" ~/.bstk/backups/AppSupport/
+      sudo rsync -aEHX "${BSTK_PATH}/" "${BAK_PATH}/app/"
+      sudo rsync -aEHX "${BSTK_APP_SUPPORT}" "${BAK_PATH}/AppSupport/"
       echo "[^] Backup completed successfully"
       echo "[*] Saved to ${HOME}/.bstk/backups"
     fi
